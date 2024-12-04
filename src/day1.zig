@@ -39,7 +39,7 @@ pub fn day1(allocator: std.mem.Allocator) !void {
     std.debug.print("Similarity score: {}\n", .{similarity_score});
 }
 
-fn readLists(input_fname: []const u8, allocator: std.mem.Allocator) !struct { []u32, []u32} {
+fn readLists(input_fname: []const u8, allocator: std.mem.Allocator) !struct { []u32, []u32 } {
     const input_file = try std.fs.cwd().openFile(
         input_fname,
         .{ .mode = .read_only },
@@ -80,5 +80,5 @@ fn readLists(input_fname: []const u8, allocator: std.mem.Allocator) !struct { []
         return error.InvalidArguments;
     }
 
-    return .{try left_list.toOwnedSlice(), try right_list.toOwnedSlice()};
+    return .{ try left_list.toOwnedSlice(), try right_list.toOwnedSlice() };
 }

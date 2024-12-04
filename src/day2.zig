@@ -72,7 +72,7 @@ fn isReportSafeInternal(report: []const u8, enable_problem_dampener: bool, skip_
         if (is_increasing == null) {
             is_increasing = is_bigger;
         }
-        
+
         if (is_increasing != is_bigger or diff < 1 or diff > 3) {
             if (!enable_problem_dampener) {
                 return 0;
@@ -81,7 +81,7 @@ fn isReportSafeInternal(report: []const u8, enable_problem_dampener: bool, skip_
             // It's possible that removing i-2 from list will change from increasing to
             // decreasing or vice-versa.
             const start = if (i < 2) 0 else i - 2;
-            for (start..i+1) |j| {
+            for (start..i + 1) |j| {
                 if (j < 0 or j >= report.len) {
                     continue;
                 }
@@ -101,57 +101,57 @@ fn isReportSafeInternal(report: []const u8, enable_problem_dampener: bool, skip_
 }
 
 test "is_report_safe when safe" {
-    const report = [_]u8{1, 2, 3, 4, 5};
+    const report = [_]u8{ 1, 2, 3, 4, 5 };
     const result = isReportSafe(&report, false);
     try std.testing.expectEqual(1, result);
 }
 
 test "is_report_safe when not monotonic increasing" {
-    const report = [_]u8{1, 2, 4, 3, 5};
+    const report = [_]u8{ 1, 2, 4, 3, 5 };
     const result = isReportSafe(&report, false);
     try std.testing.expectEqual(0, result);
 }
 
 test "is_report_safe when not monotonic decreasing" {
-    const report = [_]u8{5, 4, 3, 4, 1};
+    const report = [_]u8{ 5, 4, 3, 4, 1 };
     const result = isReportSafe(&report, false);
     try std.testing.expectEqual(0, result);
 }
 
 test "is_report_safe with single bad level" {
-    const report = [_]u8{1, 9, 3, 4, 5};
+    const report = [_]u8{ 1, 9, 3, 4, 5 };
     const result = isReportSafe(&report, true);
     try std.testing.expectEqual(1, result);
 }
 
 test "is_report_safe with two bad levels" {
-    const report = [_]u8{1, 9, 3, 4, 2};
+    const report = [_]u8{ 1, 9, 3, 4, 2 };
     const result = isReportSafe(&report, true);
     try std.testing.expectEqual(0, result);
 }
 
 test "is_report_safe with bad level at first index" {
-    const report = [_]u8{9, 1, 3, 4, 5};
+    const report = [_]u8{ 9, 1, 3, 4, 5 };
     const result = isReportSafe(&report, true);
     try std.testing.expectEqual(1, result);
 }
 
 test "is_report_safe with bad level at last index" {
-    const report = [_]u8{1, 2, 3, 4, 1};
+    const report = [_]u8{ 1, 2, 3, 4, 1 };
     const result = isReportSafe(&report, true);
     try std.testing.expectEqual(1, result);
 }
 
 test "is_report_safe with examples" {
     const reports = [_]std.ArrayList(u8){
-        try sliceToArrayList(&[_]u8{7, 6, 4, 2, 1}),
-        try sliceToArrayList(&[_]u8{1, 2, 7, 8, 9}),
-        try sliceToArrayList(&[_]u8{9, 7, 6, 2, 1}),
-        try sliceToArrayList(&[_]u8{1, 3, 2, 4, 5}),
-        try sliceToArrayList(&[_]u8{8, 6, 4, 4, 1}),
-        try sliceToArrayList(&[_]u8{1, 3, 6, 7, 9}),
+        try sliceToArrayList(&[_]u8{ 7, 6, 4, 2, 1 }),
+        try sliceToArrayList(&[_]u8{ 1, 2, 7, 8, 9 }),
+        try sliceToArrayList(&[_]u8{ 9, 7, 6, 2, 1 }),
+        try sliceToArrayList(&[_]u8{ 1, 3, 2, 4, 5 }),
+        try sliceToArrayList(&[_]u8{ 8, 6, 4, 4, 1 }),
+        try sliceToArrayList(&[_]u8{ 1, 3, 6, 7, 9 }),
     };
-    const safeties = [_]u32{1, 0, 0, 1, 1, 1};
+    const safeties = [_]u32{ 1, 0, 0, 1, 1, 1 };
 
     for (reports, safeties) |report, expected| {
         const result = isReportSafe(report.items, true);
@@ -161,12 +161,12 @@ test "is_report_safe with examples" {
 
 test "is_report_safe with i-2 problem dampener" {
     const reports = [_]std.ArrayList(u8){
-        try sliceToArrayList(&[_]u8{11, 12, 15, 18, 19, 18}),
+        try sliceToArrayList(&[_]u8{ 11, 12, 15, 18, 19, 18 }),
         try sliceToArrayList(&[_]u8{ 68, 66, 67, 69, 72, 73, 76 }),
         try sliceToArrayList(&[_]u8{ 92, 93, 92, 89, 86 }),
     };
 
-    const safeties = [_]u32{1, 1, 1};
+    const safeties = [_]u32{ 1, 1, 1 };
 
     for (reports, safeties) |report, expected| {
         const result = isReportSafe(report.items, true);
