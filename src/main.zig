@@ -1,5 +1,6 @@
 const std = @import("std");
 const day1 = @import("day1.zig");
+const day2 = @import("day2.zig");
 
 pub fn main() !void {
     var args = std.process.args();
@@ -16,22 +17,18 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
 
-    const challengeFunc = switch (challengeNumber) {
-        1 => day1.day1,
+    switch (challengeNumber) {
+        1 => {
+            try day1.day1(allocator);
+        },
+        2 => {
+            try day2.day2(allocator);
+        },
         else => return error.InvalidArguments,
-    };
-
-    try challengeFunc(allocator);
+    }
 }
 
 fn usage() void {
     std.debug.print("Usage: program <challenge n#>\n", .{});
     std.process.exit(1);
-}
-
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
 }
