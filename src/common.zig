@@ -19,13 +19,13 @@ pub fn MatrixList(comptime T: type) type {
     return struct {
         const Self = @This();
 
-        list: std.ArrayList([]T),
+        list: std.ArrayList([]const T),
         allocator: std.mem.Allocator,
 
         pub fn init(allocator: std.mem.Allocator) Self {
             return Self{
                 .allocator = allocator,
-                .list = std.ArrayList([]T).init(allocator),
+                .list = std.ArrayList([]const T).init(allocator),
             };
         }
 
@@ -36,15 +36,17 @@ pub fn MatrixList(comptime T: type) type {
             self.list.deinit();
         }
 
-        pub fn append(self: *Self, line: []T) !void {
-            try self.list.append(line);
+        pub fn append(self: *Self, line: []const T) !void {
+            const clone = try self.allocator.alloc(u8, line.len);
+            std.mem.copyForwards(u8, clone, line);
+            try self.list.append(clone);
         }
 
         pub fn numRows(self: Self) usize {
             return self.list.items.len;
         }
 
-        pub fn getRow(self: Self, i: usize) []T {
+        pub fn getRow(self: Self, i: usize) []const T {
             return self.list.items[i];
         }
 
@@ -71,6 +73,7 @@ pub fn readFileLines(input_fname: []const u8, allocator: std.mem.Allocator) !Mat
             error.EndOfStream => break,
             else => return err,
         };
+        defer allocator.free(line);
         try matrix.append(line);
     }
 
