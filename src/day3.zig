@@ -45,7 +45,7 @@ const ParseStatusExpectingChar = enum {
 fn tryParseMul(buffer: []const u8, start_idx: usize, allocator: std.mem.Allocator) !u32 {
     // Could use Boyer-Moore (i.e. bad char table) here but there's no point because
     // the substring is so short.
-    if (!std.mem.startsWith(u8, buffer[start_idx..],  "mul(")) {
+    if (!std.mem.startsWith(u8, buffer[start_idx..], "mul(")) {
         return 0;
     }
 
@@ -148,7 +148,7 @@ test "tryParseMul valid" {
 }
 
 test "tryParseMul invalid" {
-    const inputs = [_][]const u8 {
+    const inputs = [_][]const u8{
         "add(1,2)",
         "mol(1,2)",
         "mul(1,2]",
