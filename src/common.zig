@@ -56,6 +56,45 @@ pub fn MatrixList(comptime T: type) type {
     };
 }
 
+pub fn ReadByLineIterator(comptime buffer_size: usize) type {
+    return struct {
+        const Self = @This();
+        const BufReader = std.io.BufferedReader(buffer_size, std.fs.File.Reader);
+
+        file: std.fs.File,
+        reader: std.fs.File.Reader,
+        buf_reader: std.io.BufferedReader(buffer_size, std.fs.File.Reader),
+        stream: ?BufReader.Reader,
+        buf: [buffer_size]u8,
+
+        pub fn next(self: *Self) !?[]u8 {
+            if (self.stream == null)  {
+                self.stream = self.buf_reader.reader();
+            }
+
+            return self.stream.?.readUntilDelimiterOrEof(&self.buf, '\n');
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.file.close();
+        }
+    };
+}
+
+pub fn iterLines(comptime buffer_size: usize, filename: []const u8) !ReadByLineIterator(buffer_size) {
+    const file = try std.fs.cwd().openFile(filename, .{ .mode = .read_only });
+    const reader = file.reader();
+    const buf_reader = std.io.bufferedReaderSize(buffer_size, reader);
+
+    return ReadByLineIterator(buffer_size) {
+        .file = file,
+        .reader = reader,
+        .buf_reader = buf_reader,
+        .stream = null,
+        .buf = undefined,
+    };
+}
+
 pub fn readFileLines(input_fname: []const u8, allocator: std.mem.Allocator) !MatrixList(u8) {
     const input_file = try std.fs.cwd().openFile(
         input_fname,
