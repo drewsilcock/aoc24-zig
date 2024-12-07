@@ -26,7 +26,7 @@ pub fn day2(allocator: std.mem.Allocator) !void {
         defer allocator.free(line);
 
         // Split the line by spaces
-        var parts = std.mem.splitSequence(u8, line, " ");
+        var parts = std.mem.splitScalar(u8, line, ' ');
 
         // TODO: Try putting alloc outside loop to see whether Zig will automatically
         // optimise it out or not.
