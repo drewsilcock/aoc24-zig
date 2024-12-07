@@ -29,6 +29,27 @@ fn OrderMap(comptime T: type) type {
             }
             self.data.deinit();
         }
+
+        pub fn contains(self: Self, key: T, value: T) bool {
+            const values = self.data.get(key) orelse return false;
+            return std.sort.binarySearch(
+                T,
+                value,
+                values.items,
+                {},
+                compare(T),
+            ) != null;
+        }
+
+        pub fn lessThan(self: Self, a: T, b: T) bool {
+            if (self.contains(b, a)) {
+                // If there is a rule saying A must come before B, then A is less than
+                // B.
+                return true;
+            }
+
+            return false;
+        }
     };
 }
 
@@ -90,7 +111,7 @@ pub fn day5(allocator: std.mem.Allocator) !void {
                     continue;
                 }
 
-                try revalidateUpdate(order_map, current_update.items);
+                std.mem.sort(u32, current_update.items, order_map, OrderMap(u32).lessThan);
 
                 if (!isUpdateValid(order_map, current_update.items)) {
                     std.debug.print("Invalid update: {any}\n", .{current_update.items});
@@ -114,9 +135,9 @@ fn sortOrderMap(order_map: OrderMap(u32)) void {
     }
 }
 
-fn Comparer(comptime T: type) type {
+fn compare(comptime T: type) fn (void, T, T) std.math.Order {
     return struct {
-        pub fn compare(_: void, a: T, b: T) std.math.Order {
+        pub fn inner(_: void, a: T, b: T) std.math.Order {
             if (a < b) {
                 return std.math.Order.lt;
             } else if (a > b) {
@@ -125,22 +146,15 @@ fn Comparer(comptime T: type) type {
                 return std.math.Order.eq;
             }
         }
-    };
+    }.inner;
 }
 
 fn revalidateUpdate(order_map: OrderMap(u32), update: []u32) !void {
     for (update, 0..) |current_page, i| {
         for (i + 1..update.len) |j| {
             const future_page = update[j];
-            const order_value = order_map.data.get(current_page) orelse continue;
 
-            const has_before_rule = std.sort.binarySearch(
-                u32,
-                future_page,
-                order_value.items,
-                {},
-                Comparer(u32).compare,
-            );
+            const has_before_rule = order_map.contains(current_page, future_page);
 
             if (has_before_rule != null) {
                 // The future page should actually come before the current page, so swap
@@ -159,15 +173,7 @@ fn isUpdateValid(order_map: OrderMap(u32), update: []u32) bool {
     for (update, 0..) |current_page, i| {
         for (i + 1..update.len) |j| {
             const future_page = update[j];
-            const order_value = order_map.data.get(current_page) orelse continue;
-
-            const has_before_rule = std.sort.binarySearch(
-                u32,
-                future_page,
-                order_value.items,
-                {},
-                Comparer(u32).compare,
-            ) != null;
+            const has_before_rule = order_map.contains(current_page, future_page);
 
             // There is a rule saying that the current must be printed before the
             // previous page, and so the update is not valid.
