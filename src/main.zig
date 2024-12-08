@@ -4,6 +4,7 @@ const day2 = @import("day2.zig");
 const day3 = @import("day3.zig");
 const day4 = @import("day4.zig");
 const day5 = @import("day5.zig");
+const day6 = @import("day6.zig");
 
 pub fn main() !void {
     var args = std.process.args();
@@ -26,6 +27,7 @@ pub fn main() !void {
         3 => try day3.day3(allocator),
         4 => try day4.day4(allocator),
         5 => try day5.day5(allocator),
+        6 => try day6.day6(),
         else => return error.InvalidArguments,
     }
 }
