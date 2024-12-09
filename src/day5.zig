@@ -54,8 +54,9 @@ fn OrderMap(comptime T: type) type {
 }
 
 pub fn day5(allocator: std.mem.Allocator) !void {
-    var iter_lines = try common.iterLines(4096, input_fname);
-    defer iter_lines.deinit();
+    var file_iter_lines = try common.fileIterLines(4096, input_fname);
+    var iter_lines = file_iter_lines.iter();
+    defer iter_lines.close();
 
     var mode = ParseMode.PageOrderingRules;
 
