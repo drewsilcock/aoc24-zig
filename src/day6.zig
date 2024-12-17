@@ -218,7 +218,7 @@ const PatrolGrid = struct {
     }
 };
 
-pub fn day6() !void {
+pub fn solve() !void {
     var file_iter_lines = try common.fileIterLines(buffer_size, input_fname);
     var iter_lines = file_iter_lines.iter();
     defer iter_lines.close();

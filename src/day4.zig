@@ -5,7 +5,7 @@ const input_fname = "inputs/day4.txt";
 const xmas_word = "XMAS";
 const mas_word = "MAS";
 
-pub fn day4(allocator: std.mem.Allocator) !void {
+pub fn solve(allocator: std.mem.Allocator) !void {
     const lines = try common.readFileLines(input_fname, allocator);
     defer lines.deinit();
 

@@ -3,7 +3,7 @@ const common = @import("common.zig");
 
 const input_fname = "inputs/day3.txt";
 
-pub fn day3(allocator: std.mem.Allocator) !void {
+pub fn solve(allocator: std.mem.Allocator) !void {
     const corrupted_memory = try common.readFile(input_fname, allocator);
     defer allocator.free(corrupted_memory);
 

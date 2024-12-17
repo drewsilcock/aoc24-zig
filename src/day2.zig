@@ -2,7 +2,7 @@ const std = @import("std");
 
 const input_fname = "inputs/day2.txt";
 
-pub fn day2(allocator: std.mem.Allocator) !void {
+pub fn solve(allocator: std.mem.Allocator) !void {
     const input_file = try std.fs.cwd().openFile(
         input_fname,
         .{ .mode = .read_only },

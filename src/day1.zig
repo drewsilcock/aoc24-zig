@@ -1,7 +1,7 @@
 const std = @import("std");
 const common = @import("common.zig");
 
-pub fn day1(allocator: std.mem.Allocator) !void {
+pub fn solve(allocator: std.mem.Allocator) !void {
     // Part 1 – list distance
     const left_list, const right_list = try readLists("inputs/day1.txt", allocator);
     defer allocator.free(left_list);

@@ -5,6 +5,8 @@ const day3 = @import("day3.zig");
 const day4 = @import("day4.zig");
 const day5 = @import("day5.zig");
 const day6 = @import("day6.zig");
+const day7 = @import("day7.zig");
+const day8 = @import("day8.zig");
 
 pub fn main() !void {
     var args = std.process.args();
@@ -22,12 +24,14 @@ pub fn main() !void {
     defer _ = gpa.deinit();
 
     switch (challengeNumber) {
-        1 => try day1.day1(allocator),
-        2 => try day2.day2(allocator),
-        3 => try day3.day3(allocator),
-        4 => try day4.day4(allocator),
-        5 => try day5.day5(allocator),
-        6 => try day6.day6(),
+        1 => try day1.solve(allocator),
+        2 => try day2.solve(allocator),
+        3 => try day3.solve(allocator),
+        4 => try day4.solve(allocator),
+        5 => try day5.solve(allocator),
+        6 => try day6.solve(),
+        7 => try day7.run(allocator),
+        8 => try day8.run(allocator),
         else => return error.InvalidArguments,
     }
 }
