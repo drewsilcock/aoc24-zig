@@ -1,0 +1,35 @@
+version: '3'
+
+vars:
+  BUILD_DIR: zig-out
+  BINARY: aoc24
+
+tasks:
+  run-*:
+    vars:
+      DAY: '{{index .MATCH 0}}'
+    cmds:
+      - zig build run -- {{ .DAY }}
+
+  build-debug:
+    cmds:
+      - zig build -Doptimize=Debug
+
+  build-release:
+    cmds:
+      - zig build -Doptimize=ReleaseFast
+
+  test:
+    cmds:
+      - zig test src/tests.zig
+
+  fmt:
+    cmds:
+      - zig fmt src/**/*.zig
+
+  bench-*:
+    vars:
+      DAY: '{{index .MATCH 0}}'
+    cmds:
+      - task: build-release
+      - hyperfine --warmup 5 -N './{{ .BUILD_DIR }}/bin/{{ .BINARY }} -- {{ .DAY }}'
