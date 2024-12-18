@@ -32,10 +32,19 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .error_tracing = true,
+    });
+
+    const test_check = b.addTest(.{
+        .root_source_file = b.path("src/tests.zig"),
+        .target = target,
+        .optimize = optimize,
+        .error_tracing = true,
     });
 
     const check = b.step("check", "Check for compilation errors.");
     check.dependOn(&exe_check.step);
+    check.dependOn(&test_check.step);
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
