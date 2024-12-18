@@ -195,8 +195,8 @@ const AntennaGrid = struct {
             grid.items[antinode.toIndex(self.width)] = '#';
         }
 
-        for (0..self.width) |row_idx| {
-            for (0..self.height) |col_idx| {
+        for (0..self.height) |row_idx| {
+            for (0..self.width) |col_idx| {
                 const point = Point{ .row = @intCast(row_idx), .col = @intCast(col_idx) };
                 const cell = grid.items[point.toIndex(self.width)];
                 std.debug.print("{c}", .{cell});
