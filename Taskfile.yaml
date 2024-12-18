@@ -32,4 +32,4 @@ tasks:
       DAY: '{{index .MATCH 0}}'
     cmds:
       - task: build-release
-      - hyperfine --warmup 5 -N './{{ .BUILD_DIR }}/bin/{{ .BINARY }} -- {{ .DAY }}'
+      - hyperfine --warmup 5 './{{ .BUILD_DIR }}/bin/{{ .BINARY }} {{ .DAY }}'
