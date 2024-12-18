@@ -26,11 +26,13 @@ fn solve(allocator: std.mem.Allocator) !Solution {
 
     const compact_checksum = filesystem.checksum();
 
-    filesystem.deinit();
-    try filesystem.readDiskMap(input);
-    try filesystem.defragCompact();
+    var defrag_fs = Filesystem.init(allocator);
+    defer defrag_fs.deinit();
 
-    const defrag_compact_checksum = filesystem.checksum();
+    try defrag_fs.readDiskMap(input);
+    try defrag_fs.defragCompact();
+
+    const defrag_compact_checksum = defrag_fs.checksum();
 
     return Solution{
         .compact_checksum = compact_checksum,
@@ -38,47 +40,48 @@ fn solve(allocator: std.mem.Allocator) !Solution {
     };
 }
 
-const Block = struct {
-    // If id == null, block is free.
-    id: ?u32,
-};
-
 const Filesystem = struct {
     const Self = @This();
 
-    const BlockList = std.DoublyLinkedList(Block);
-    const Node = BlockList.Node;
+    const Block = ?u32; // null means free
+    const BlockList = std.ArrayList(Block);
+    const File = struct {
+        id: u32,
+        start_idx: u32,
+        size: u8,
+    };
+    const FileList = std.ArrayList(File);
 
     blocks: BlockList,
-    first_free_block: ?*Node,
-    last_file_block: ?*Node,
+    num_blocks: i32 = 0,
+    files: FileList, // Not used by compact, only defragCompact
     allocator: std.mem.Allocator,
+
+    // I originally tried keeping track of free spaces here, but the overhead of
+    // re-calculating the free space map after each defragmentation step was too high.
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return Self{
-            .blocks = .{},
-            .first_free_block = null,
-            .last_file_block = null,
+            .blocks = BlockList.init(allocator),
+            .num_blocks = 0,
+            .files = FileList.init(allocator),
             .allocator = allocator,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        var current_node = self.blocks.first;
-
-        while (current_node) |node| {
-            current_node = node.next;
-            self.allocator.destroy(node);
-        }
-
-        self.first_free_block = null;
-        self.last_file_block = null;
-        self.blocks = .{};
+        self.blocks.deinit();
+        self.files.deinit();
+        self.num_blocks = 0;
     }
 
     pub fn readDiskMap(self: *Self, disk_map: []const u8) !void {
         var is_file_block = true;
         var current_block_id: u32 = 0;
+
+        // Block index is different to iteration index because a single disk map entry
+        // represents multiple blocks.
+        var block_idx: u32 = 0;
 
         for (disk_map) |map_entry| {
             if (map_entry == '\n') {
@@ -87,207 +90,155 @@ const Filesystem = struct {
 
             const num_blocks = try std.fmt.charToDigit(map_entry, 10);
 
-            for (0..num_blocks) |_| {
-                const node = try self.allocator.create(Node);
-                node.* = .{
-                    .data = .{
-                        .id = if (is_file_block) current_block_id else null,
-                    },
-                };
-                self.blocks.append(node);
+            if (num_blocks != 0) {
+                const block_id = if (is_file_block) current_block_id else null;
+
+                try self.blocks.appendNTimes(block_id, num_blocks);
 
                 if (is_file_block) {
-                    self.last_file_block = node;
-                } else if (self.first_free_block == null) {
-                    self.first_free_block = node;
+                    try self.files.append(.{
+                        .id = current_block_id,
+                        .start_idx = block_idx,
+                        .size = num_blocks,
+                    });
+
+                    current_block_id += 1;
                 }
             }
 
-            if (is_file_block) {
-                current_block_id += 1;
-            }
-
+            block_idx += num_blocks;
             is_file_block = !is_file_block;
         }
+
+        self.num_blocks = @intCast(self.blocks.items.len);
     }
 
+    /// Compact blocks into left-most free spaces.
+    ///
+    /// This will invalidate the start indices in the `self.files` list.
     pub fn compact(self: *Self) !void {
-        if (self.last_file_block == null or self.first_free_block == null) {
-            // We've got nothing to rearrange or no space to rearrange it into.
-            return;
-        }
+        var left_index: i32 = -1;
+        var right_index: i32 = self.num_blocks;
 
         while (true) {
-            // Rearranging the nodes will never cause either of these to be null if they
-            // were not null to start with.
-            const free_block = self.first_free_block.?;
-            const file_block = self.last_file_block.?;
+            while (true) {
+                left_index += 1;
 
-            if (file_block.next == free_block) {
-                // If the first free block is after the last file block, we're done.
-                break;
+                if (left_index >= right_index) {
+                    // We've gone past the rightmost file block so there's no
+                    // opportunity for more compaction.
+                    return;
+                }
+
+                if (left_index == self.num_blocks) {
+                    // No more free blocks left in the filesystem.
+                    return;
+                }
+
+                if (self.blocks.items[@intCast(left_index)] == null) {
+                    // We've found the next leftmost free block.
+                    break;
+                }
             }
 
-            // Swap the data between the two nodes.
-            free_block.data.id = file_block.data.id;
-            file_block.data.id = null;
+            while (true) {
+                right_index -= 1;
 
-            // Find the new first free block by traversing forwards from the old one.
-            self.first_free_block = firstEmptyBlock(free_block);
+                if (right_index == -1) {
+                    // No more files blocks left to compact.
+                    return;
+                }
 
-            // Find the new last file block by traversing backwards from the old one.
-            self.last_file_block = lastFileBlock(file_block);
+                if (right_index <= left_index) {
+                    // We've gone past the leftmost free block so there's no
+                    // opportunity for more compaction.
+                    return;
+                }
+
+                if (self.blocks.items[@intCast(right_index)] != null) {
+                    // We've found the next rightmost file block.
+                    break;
+                }
+            }
+
+            // Swap the left and right blocks around.
+            const li: u32 = @intCast(left_index);
+            const ri: u32 = @intCast(right_index);
+            self.blocks.items[li] = self.blocks.items[ri];
+            self.blocks.items[ri] = null;
         }
     }
 
     /// Rearrange the blocks so that all file blocks are contiguous.
-    ///
-    /// This implementation takes a fairly long time to run for the long puzzle input,
-    /// most likely because I'm doing so much iterating through the linked list. To
-    /// improve performance, you could keep track of the size of a block within the
-    /// block (as well as the ID) and even keep track of where the free spaces are and
-    /// how big they are. Due to the disk map having one char for the number of blocks,
-    /// you could just have a map containing the first instance of a free space of each
-    /// size.
     pub fn defragCompact(self: *Self) !void {
-        if (self.last_file_block == null or self.first_free_block == null) {
-            // We've got nothing to rearrange or no space to rearrange it into.
-            return;
-        }
+        // Keep track of where we found the earliest free block for a specific size –
+        // there's no point looking to the left of that when we're looking for the size
+        // up.
+        var earliest_free_block: [10]u32 = [_]u32{0} ** 10;
 
-        var current_block_id: u32 = self.last_file_block.?.data.id orelse 0;
+        var i = self.files.items.len;
+        while (i > 0) {
+            i -= 1;
 
-        while (current_block_id != 0) {
-            var maybe_file_start_block = self.blocks.last;
-            while (maybe_file_start_block) |node| {
-                if (node.data.id == current_block_id and
-                    (node.prev == null or node.prev.?.data.id != current_block_id))
-                {
-                    break;
-                }
+            const file = self.files.items[i];
 
-                maybe_file_start_block = node.prev;
-            }
+            const free_space_idx = self.freeSpaceForSize(file.size, earliest_free_block[file.size]) orelse continue;
+            earliest_free_block[file.size] = free_space_idx;
 
-            const file_start_block = maybe_file_start_block orelse {
-                current_block_id -= 1;
+            if (free_space_idx > file.start_idx) {
+                // We can move the file to the left.
                 continue;
-            };
-
-            const file_block_size = countBlockSize(file_start_block);
-
-            var file_last_block = file_start_block;
-            for (0..file_block_size - 1) |_| {
-                file_last_block = file_last_block.next.?;
             }
 
-            // Try placing block in any free block with sufficient space. We can't start
-            // from the first free block because the first free block may be after the
-            // file block.
-            var maybe_free_block = self.blocks.first;
-            while (maybe_free_block) |maybe_free_node| {
-                // If we've got back to the file block, we've tried all previous free blocks.
-                if (maybe_free_node == file_start_block) {
+            for (free_space_idx..free_space_idx + file.size) |j| {
+                self.blocks.items[j] = file.id;
+            }
+
+            for (file.start_idx..file.start_idx + file.size) |j| {
+                self.blocks.items[j] = null;
+            }
+
+            self.files.items[i].start_idx = free_space_idx;
+        }
+    }
+
+    fn freeSpaceForSize(self: Self, size: u32, from_idx: u32) ?u32 {
+        var start_idx: u32 = from_idx;
+
+        // First find the next free block start from `from_idx`.
+        while (true) {
+            if (start_idx == self.num_blocks) {
+                return null;
+            }
+
+            if (self.blocks.items[start_idx] == null) {
+                const free_space_size = self.entrySizeAtBlock(start_idx);
+                if (free_space_size >= size) {
                     break;
                 }
 
-                if (maybe_free_node.data.id != null or countBlockSize(maybe_free_node) < file_block_size) {
-                    // Block is not free or not enough space to move the whole file block here.
-                    maybe_free_block = maybe_free_node.next;
-                    continue;
-                }
-
-                // We found a free block with enough space, so move the whole file block there.
-                copyBlocks(maybe_free_node, current_block_id, file_block_size);
-
-                // Now clear out the old file block.
-                copyBlocks(file_start_block, null, file_block_size);
-
-                // We may have invalidated first_free_block and last_free_block but we
-                // don't use either of those mid-iteration so let's just update them
-                // once at the end.
-                break;
+                // We can skip forward to the end of this free space block.
+                start_idx += free_space_size;
+            } else {
+                start_idx += 1;
             }
-
-            current_block_id -= 1;
         }
 
-        // Reset the first free block and last file block to their correct values.
-        self.first_free_block = firstEmptyBlock(self.blocks.first.?);
-        self.last_file_block = lastFileBlock(self.blocks.last.?);
+        return start_idx;
     }
 
-    fn firstEmptyBlock(from_node: *Node) ?*Node {
-        var current_block: ?*Node = from_node;
-        while (current_block) |node| {
-            if (node.data.id == null) {
-                return current_block;
-            }
-
-            current_block = node.next;
-        }
-
-        return null;
-    }
-
-    fn lastFileBlock(from_node: *Node) ?*Node {
-        var current_block: ?*Node = from_node;
-        while (current_block) |node| {
-            if (node.data.id != null) {
-                return current_block;
-            }
-
-            current_block = node.prev;
-        }
-
-        return null;
-    }
-
-    fn copyBlocks(dest: *Node, src_block_id: ?u32, size: u32) void {
-        var i: u32 = 0;
-        var current_node: ?*Node = dest;
-
-        while (current_node) |node| {
-            if (i == size) {
-                break;
-            }
-
-            node.data.id = src_block_id;
-            current_node = node.next;
-            i += 1;
-        }
-    }
-
-    fn findFirstBlockWithId(self: Self, block_id: u32) ?*Node {
-        // We traverse from end because we are rearranging from back to front, although
-        // I don't think it makes masses of difference, it's just a performance thing.
-        var current_node = self.last_file_block;
-        while (current_node) |node| {
-            const prev_node = node.prev;
-
-            if (node.data.id == block_id and
-                (prev_node == null or prev_node.?.data.id != block_id))
-            {
-                return node;
-            }
-
-            current_node = prev_node;
-        }
-
-        return null;
-    }
-
-    fn countBlockSize(start_node: *Node) u32 {
-        const node_id = start_node.data.id;
-        var current_node: ?*Node = start_node;
+    fn entrySizeAtBlock(self: Self, block_idx: u32) u32 {
+        var i = block_idx;
         var size: u32 = 0;
+        const block_id = self.blocks.items[block_idx];
 
-        while (current_node) |node| : (size += 1) {
-            if (node.data.id != node_id) {
+        while (i < self.num_blocks) {
+            if (self.blocks.items[i] != block_id) {
                 break;
             }
 
-            current_node = node.next;
+            size += 1;
+            i += 1;
         }
 
         return size;
@@ -295,33 +246,33 @@ const Filesystem = struct {
 
     pub fn checksum(self: Self) u64 {
         var sum: u64 = 0;
-        var i: u32 = 0;
-        var current_node = self.blocks.first;
 
-        while (current_node) |node| {
-            sum += i * (node.data.id orelse 0);
-            i += 1;
-            current_node = node.next;
+        for (self.blocks.items, 0..) |block_id, i| {
+            sum += i * (block_id orelse 0);
         }
 
         return sum;
     }
 
     pub fn print(self: Self) void {
-        std.debug.print("|", .{});
+        std.debug.print("Blocks:\n", .{});
 
-        var current_node = self.blocks.first;
-        while (current_node) |node| {
-            if (node.data.id == null) {
+        std.debug.print("|", .{});
+        for (self.blocks.items) |block_id| {
+            if (block_id == null) {
                 std.debug.print(".", .{});
             } else {
-                std.debug.print("{}", .{node.data.id.?});
+                std.debug.print("{}", .{block_id.?});
             }
 
             std.debug.print("|", .{});
-            current_node = node.next;
         }
         std.debug.print("\n", .{});
+
+        std.debug.print("Files:\n", .{});
+        for (self.files.items) |file| {
+            std.debug.print("\t{}: {} ({})\n", .{ file.id, file.start_idx, file.size });
+        }
     }
 };
 
@@ -340,6 +291,19 @@ test Filesystem {
         7,    7,    7,    null,
         8,    8,    8,    8,
         9,    9,
+    };
+
+    const expected_files = [_]Filesystem.File{
+        .{ .id = 0, .start_idx = 0, .size = 2 },
+        .{ .id = 1, .start_idx = 5, .size = 3 },
+        .{ .id = 2, .start_idx = 11, .size = 1 },
+        .{ .id = 3, .start_idx = 15, .size = 3 },
+        .{ .id = 4, .start_idx = 19, .size = 2 },
+        .{ .id = 5, .start_idx = 22, .size = 4 },
+        .{ .id = 6, .start_idx = 27, .size = 4 },
+        .{ .id = 7, .start_idx = 32, .size = 3 },
+        .{ .id = 8, .start_idx = 36, .size = 4 },
+        .{ .id = 9, .start_idx = 40, .size = 2 },
     };
 
     const expected_compacted_block_ids = [_]?u32{
@@ -376,47 +340,21 @@ test Filesystem {
     defer filesystem.deinit();
 
     try filesystem.readDiskMap(input_disk_map);
-
-    var current_node = filesystem.blocks.first;
-    var i: u32 = 0;
-    while (current_node) |node| : (i += 1) {
-        const expected_id = expected_block_ids[i];
-        const actual_id = node.data.id;
-        try std.testing.expectEqual(expected_id, actual_id);
-
-        current_node = node.next;
-    }
+    try std.testing.expectEqualSlices(?u32, &expected_block_ids, filesystem.blocks.items);
+    try std.testing.expectEqualSlices(Filesystem.File, &expected_files, filesystem.files.items);
 
     try filesystem.compact();
-
-    current_node = filesystem.blocks.first;
-    i = 0;
-    while (current_node) |node| : (i += 1) {
-        const expected_id = expected_compacted_block_ids[i];
-        const actual_id = node.data.id;
-        try std.testing.expectEqual(expected_id, actual_id);
-
-        current_node = node.next;
-    }
+    try std.testing.expectEqualSlices(?u32, &expected_compacted_block_ids, filesystem.blocks.items);
 
     const actual_checksum = filesystem.checksum();
     try std.testing.expectEqual(expected_checksum, actual_checksum);
 
-    filesystem.deinit();
-    // After deinit, filesystem is empty and can be re-used.
+    var defrag_fs = Filesystem.init(std.testing.allocator);
+    defer defrag_fs.deinit();
 
-    try filesystem.readDiskMap(input_disk_map);
-    try filesystem.defragCompact();
-
-    current_node = filesystem.blocks.first;
-    i = 0;
-    while (current_node) |node| : (i += 1) {
-        const expected_id = expected_defrag_compacted_block_ids[i];
-        const actual_id = node.data.id;
-        try std.testing.expectEqual(expected_id, actual_id);
-
-        current_node = node.next;
-    }
+    try defrag_fs.readDiskMap(input_disk_map);
+    try defrag_fs.defragCompact();
+    try std.testing.expectEqualSlices(?u32, &expected_defrag_compacted_block_ids, defrag_fs.blocks.items);
 }
 
 test solve {
