@@ -5,11 +5,18 @@ vars:
   BINARY: aoc24
 
 tasks:
-  run-*:
+  run-debug-*:
     vars:
       DAY: '{{index .MATCH 0}}'
     cmds:
       - zig build run -- {{ .DAY }}
+
+  run-release-*:
+    vars:
+      DAY: '{{index .MATCH 0}}'
+    cmds:
+      - task: build-release
+      - './{{ .BUILD_DIR }}/bin/{{ .BINARY }} {{ .DAY }}'
 
   build-debug:
     cmds:
